@@ -1,281 +1,441 @@
 import json
 from tabulate import tabulate
 from datetime import datetime, timedelta
-import time
 import threading
+from enum import Enum
 import os
+import colorama
+from colorama import Fore, Style
+from dataclasses import dataclass, asdict
+from typing import Optional, List, Union
 
-tasks = []
-task_id_counter = 1
-deadline_check_thread = None
-stop_thread = False
+# Initialize colorama for cross-platform colored output
+colorama.init()
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+class Priority(Enum):
+    HIGH = ("Tinggi", "🔴")
+    MEDIUM = ("Sedang", "🟡")
+    LOW = ("Rendah", "🟢")
 
-def show_menu():
-    print("\n=== Task Manager ===")
-    print("1. Tambahkan tugas")
-    print("2. Lihat semua tugas")
-    print("3. Tandai tugas selesai")
-    print("4. Hapus tugas")
-    print("5. Edit tugas")
-    print("6. Filter tugas berdasarkan status")
-    print("7. Cari tugas")
-    print("8. Simpan tugas ke file")
-    print("9. Muat tugas dari file")
-    print("10. Keluar")
+    def __init__(self, label: str, icon: str):
+        self.label = label
+        self.icon = icon
 
-def parse_deadline(deadline_str):
-    try:
-        return datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
-    except ValueError:
-        return None
+class TaskStatus(Enum):
+    PENDING = "Pending"
+    COMPLETED = "Completed"
 
-def get_deadline_from_option():
-    now = datetime.now()
-    print("\nPilih opsi deadline:")
-    print("1. Hari ini (23:59)")
-    print("2. Besok (23:59)")
-    print("3. Minggu ini (Minggu, 23:59)")
-    print("4. Seminggu dari sekarang")
-    print("5. Akhir bulan ini")
-    print("6. Sebulan dari sekarang")
-    print("7. Custom (format: YYYY-MM-DD HH:MM)")
-    print("8. Custom (masukkan dalam hari)")
-    
-    choice = input("\nPilih opsi deadline (1-8): ")
-    
-    if choice == "1":
-        return now.replace(hour=23, minute=59, second=0, microsecond=0)
-    elif choice == "2":
-        tomorrow = now + timedelta(days=1)
-        return tomorrow.replace(hour=23, minute=59, second=0, microsecond=0)
-    elif choice == "3":
-        days_until_sunday = 6 - now.weekday()
-        sunday = now + timedelta(days=days_until_sunday)
-        return sunday.replace(hour=23, minute=59, second=0, microsecond=0)
-    elif choice == "4":
-        return now + timedelta(days=7)
-    elif choice == "5":
-        if now.month == 12:
-            next_month = now.replace(year=now.year + 1, month=1, day=1)
-        else:
-            next_month = now.replace(month=now.month + 1, day=1)
-        end_of_month = next_month - timedelta(days=1)
-        return end_of_month.replace(hour=23, minute=59, second=0, microsecond=0)
-    elif choice == "6":
-        return now + timedelta(days=30)
-    elif choice == "7":
+@dataclass
+class Task:
+    id: int
+    title: str
+    description: str
+    priority: Priority
+    status: TaskStatus
+    deadline: str
+    created_at: str
+    completed_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data['priority'] = self.priority.name
+        data['status'] = self.status.value
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Task':
+        data['priority'] = Priority[data['priority']]
+        data['status'] = TaskStatus(data['status'])
+        return cls(**data)
+
+class TaskManager:
+    def __init__(self):
+        self.tasks: List[Task] = []
+        self.task_id_counter = 1
+        self.stop_thread = False
+        self.deadline_check_thread = None
+
+    @staticmethod
+    def clear_screen():
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    @staticmethod
+    def print_colored(text: str, color: str = Fore.WHITE):
+        print(f"{color}{text}{Style.RESET_ALL}")
+
+    def get_time_remaining(self, deadline: str) -> str:
+        now = datetime.now()
+        deadline_date = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
+        if deadline_date < now:
+            return "Terlambat"
+        
+        delta = deadline_date - now
+        days = delta.days
+        hours = delta.seconds // 3600
+        minutes = (delta.seconds % 3600) // 60
+        
+        if days > 0:
+            return f"{days} hari {hours} jam"
+        elif hours > 0:
+            return f"{hours} jam {minutes} menit"
+        return f"{minutes} menit"
+
+    def add_task(self):
         while True:
-            deadline_str = input("Masukkan deadline (format: YYYY-MM-DD HH:MM): ").strip()
-            deadline = parse_deadline(deadline_str)
-            if deadline:
-                return deadline
-            print("Format deadline tidak valid! Gunakan format: YYYY-MM-DD HH:MM")
-    elif choice == "8":
+            title = input("Masukkan nama tugas: ").strip()
+            if title:
+                break
+            self.print_colored("Nama tugas tidak boleh kosong!", Fore.RED)
+        
+        description = input("Masukkan deskripsi tugas (opsional): ").strip()
+        priority = self._get_priority()
+        deadline = self._get_deadline()
+        
+        task = Task(
+            id=self.task_id_counter,
+            title=title,
+            description=description,
+            priority=priority,
+            status=TaskStatus.PENDING,
+            deadline=deadline.strftime("%Y-%m-%d %H:%M"),
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M")
+        )
+        
+        self.tasks.append(task)
+        self.print_colored(f"\nTugas '{title}' berhasil ditambahkan!", Fore.GREEN)
+        print(f"Deadline: {deadline.strftime('%Y-%m-%d %H:%M')}")
+        self.task_id_counter += 1
+
+    def _get_priority(self) -> Priority:
+        print("\nPilih prioritas tugas:")
+        for priority in Priority:
+            print(f"{priority.value[0]}. {priority.label} {priority.icon}")
+        
+        while True:
+            try:
+                choice = int(input("Pilih prioritas (1-3): "))
+                if 1 <= choice <= 3:
+                    return list(Priority)[choice - 1]
+                self.print_colored("Pilihan tidak valid!", Fore.RED)
+            except ValueError:
+                self.print_colored("Masukkan angka yang valid!", Fore.RED)
+
+    def _get_deadline(self) -> datetime:
+        now = datetime.now()
+        deadline_options = {
+            1: lambda: now.replace(hour=23, minute=59, second=0, microsecond=0),
+            2: lambda: (now + timedelta(days=1)).replace(hour=23, minute=59, second=0, microsecond=0),
+            3: lambda: (now + timedelta(days=(6 - now.weekday()))).replace(hour=23, minute=59, second=0, microsecond=0),
+            4: lambda: now + timedelta(days=7),
+            5: lambda: (now.replace(day=1, month=now.month + 1 if now.month < 12 else 1, 
+                                  year=now.year + 1 if now.month == 12 else now.year) - timedelta(days=1))
+                       .replace(hour=23, minute=59, second=0, microsecond=0),
+            6: lambda: now + timedelta(days=30)
+        }
+
+        print("\nPilih opsi deadline:")
+        deadline_descriptions = [
+            "Hari ini (23:59)",
+            "Besok (23:59)",
+            "Minggu ini (Minggu, 23:59)",
+            "Seminggu dari sekarang",
+            "Akhir bulan ini",
+            "Sebulan dari sekarang",
+            "Custom (format: YYYY-MM-DD HH:MM)",
+            "Custom (masukkan dalam hari)",
+            "Custom (masukkan dalam jam)"
+        ]
+
+        for idx, desc in enumerate(deadline_descriptions, 1):
+            print(f"{idx}. {desc}")
+
+        while True:
+            try:
+                choice = int(input("\nPilih opsi deadline (1-9): "))
+                if choice in deadline_options:
+                    return deadline_options[choice]()
+                elif choice == 7:
+                    return self._get_custom_deadline()
+                elif choice == 8:
+                    return self._get_deadline_in_days()
+                elif choice == 9:
+                    return self._get_deadline_in_hours()
+                self.print_colored("Pilihan tidak valid!", Fore.RED)
+            except ValueError:
+                self.print_colored("Masukkan angka yang valid!", Fore.RED)
+
+    def _get_custom_deadline(self) -> datetime:
+        while True:
+            try:
+                deadline_str = input("Masukkan deadline (format: YYYY-MM-DD HH:MM): ").strip()
+                return datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                self.print_colored("Format deadline tidak valid! Gunakan format: YYYY-MM-DD HH:MM", Fore.RED)
+
+    def _get_deadline_in_days(self) -> datetime:
         while True:
             try:
                 days = int(input("Masukkan jumlah hari: "))
                 if days > 0:
-                    return now + timedelta(days=days)
-                print("Jumlah hari harus lebih dari 0!")
+                    return datetime.now() + timedelta(days=days)
+                self.print_colored("Jumlah hari harus lebih dari 0!", Fore.RED)
             except ValueError:
-                print("Masukkan angka yang valid!")
-    else:
-        print("Pilihan tidak valid! Menggunakan default: seminggu dari sekarang")
-        return now + timedelta(days=7)
+                self.print_colored("Masukkan angka yang valid!", Fore.RED)
 
-def add_task():
-    global task_id_counter
-    while True:
-        title = input("Masukkan nama tugas: ").strip()
-        if title:
-            break
-        print("Nama tugas tidak boleh kosong!")
-    
-    deadline = get_deadline_from_option()
-    
-    task = {
-        "id": task_id_counter,
-        "title": title,
-        "status": "Pending",
-        "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-    }
-    tasks.append(task)
-    print(f"\nTugas '{title}' berhasil ditambahkan!")
-    print(f"Deadline: {deadline.strftime('%Y-%m-%d %H:%M')}")
-    task_id_counter += 1
+    def _get_deadline_in_hours(self) -> datetime:
+        while True:
+            try:
+                hours = int(input("Masukkan jumlah jam: "))
+                if hours > 0:
+                    return datetime.now() + timedelta(hours=hours)
+                self.print_colored("Jumlah jam harus lebih dari 0!", Fore.RED)
+            except ValueError:
+                self.print_colored("Masukkan angka yang valid!", Fore.RED)
 
-def format_tasks_table(task_list):
-    if not task_list:
-        return "Tidak ada tugas!"
-    
-    table_data = []
-    for task in task_list:
-        status = "✔️" if task["status"] == "Completed" else "❌"
-        deadline = datetime.strptime(task["deadline"], "%Y-%m-%d %H:%M")
+    def format_tasks_table(self, task_list: List[Task]) -> str:
+        if not task_list:
+            return "Tidak ada tugas!"
+        
+        table_data = []
         now = datetime.now()
         
-        if task["status"] != "Completed":
-            if deadline < now:
-                deadline_status = "🔴 Terlambat"
-            elif (deadline - now) <= timedelta(days=1):
-                deadline_status = "🟡 Segera"
+        for task in task_list:
+            status = "✔️" if task.status == TaskStatus.COMPLETED else "❌"
+            deadline = datetime.strptime(task.deadline, "%Y-%m-%d %H:%M")
+            
+            if task.status != TaskStatus.COMPLETED:
+                if deadline < now:
+                    deadline_status = "🔴 Terlambat"
+                elif (deadline - now) <= timedelta(days=1):
+                    deadline_status = "🟡 Segera"
+                else:
+                    deadline_status = "🟢 Masih ada waktu"
+                time_remaining = self.get_time_remaining(task.deadline)
             else:
-                deadline_status = "🟢 Masih ada waktu"
-        else:
-            deadline_status = "✔️ Selesai"
+                deadline_status = "✔️ Selesai"
+                time_remaining = "-"
 
-        table_data.append([
-            task["id"],
-            status,
-            task["title"],
-            task["deadline"],
-            deadline_status
-        ])
-    
-    headers = ["ID", "Status", "Judul", "Deadline", "Status Deadline"]
-    return tabulate(table_data, headers=headers, tablefmt="grid")
+            description = task.description if task.description else "-"
+            completed_at = task.completed_at if task.completed_at else "-"
 
-def view_tasks():
-    clear_screen()
-    print(format_tasks_table(tasks))
-
-def check_deadlines():
-    global stop_thread
-    while not stop_thread:
-        now = datetime.now()
-        for task in tasks:
-            if task["status"] != "Completed":
-                deadline = datetime.strptime(task["deadline"], "%Y-%m-%d %H:%M")
-                if deadline > now and (deadline - now) <= timedelta(minutes=15):
-                    print(f"\n⚠️ PENGINGAT: Tugas '{task['title']}' akan berakhir dalam {int((deadline - now).total_seconds() / 60)} menit!")
-        time.sleep(60)  # Cek setiap menit
-
-def mark_task_completed():
-    view_tasks()
-    try:
-        task_id = int(input("\nMasukkan ID tugas yang ingin ditandai selesai: "))
-        for task in tasks:
-            if task["id"] == task_id:
-                task["status"] = "Completed"
-                print(f"Tugas '{task['title']}' berhasil ditandai selesai!")
-                return
-        print("ID tugas tidak ditemukan!")
-    except ValueError:
-        print("ID harus berupa angka!")
-
-def delete_task():
-    view_tasks()
-    try:
-        task_id = int(input("\nMasukkan ID tugas yang ingin dihapus: "))
-        for task in tasks:
-            if task["id"] == task_id:
-                tasks.remove(task)
-                print(f"Tugas '{task['title']}' berhasil dihapus!")
-                return
-        print("ID tugas tidak ditemukan!")
-    except ValueError:
-        print("ID harus berupa angka!")
-
-def edit_task():
-    view_tasks()
-    try:
-        task_id = int(input("\nMasukkan ID tugas yang ingin diubah: "))
-        for task in tasks:
-            if task["id"] == task_id:
-                new_title = input(f"Masukkan nama baru untuk tugas '{task['title']}' (kosongkan jika tidak ingin mengubah): ")
-                if new_title.strip():
-                    task["title"] = new_title
-
-                new_deadline = input(f"Masukkan deadline baru (format: YYYY-MM-DD HH:MM) (kosongkan jika tidak ingin mengubah): ")
-                if new_deadline.strip():
-                    deadline = parse_deadline(new_deadline)
-                    if deadline:
-                        task["deadline"] = deadline.strftime("%Y-%m-%d %H:%M")
-                    else:
-                        print("Format deadline tidak valid! Deadline tidak diubah.")
-                
-                print(f"Tugas berhasil diubah!")
-                return
-        print("ID tugas tidak ditemukan!")
-    except ValueError:
-        print("ID harus berupa angka!")
-
-def filter_tasks():
-    status = input("Masukkan status untuk memfilter tugas (Pending/Completed): ").capitalize()
-    filtered_tasks = [task for task in tasks if task["status"] == status]
-    clear_screen()
-    print(format_tasks_table(filtered_tasks))
-
-def search_task():
-    keyword = input("Masukkan kata kunci untuk mencari tugas: ").lower()
-    found_tasks = [task for task in tasks if keyword in task["title"].lower()]
-    clear_screen()
-    print(format_tasks_table(found_tasks))
-
-def save_tasks_to_file():
-    filename = input("Masukkan nama file untuk menyimpan tugas (contoh: tasks.json): ")
-    with open(filename, 'w') as file:
-        json.dump(tasks, file, indent=4)
-    print(f"Tugas berhasil disimpan ke file '{filename}'!")
-
-def load_tasks_from_file():
-    global task_id_counter
-    filename = input("Masukkan nama file untuk memuat tugas (contoh: tasks.json): ")
-    try:
-        with open(filename, 'r') as file:
-            global tasks
-            tasks = json.load(file)
-            if tasks:
-                task_id_counter = max(task["id"] for task in tasks) + 1
-        print(f"Tugas berhasil dimuat dari file '{filename}'!")
-    except FileNotFoundError:
-        print(f"File '{filename}' tidak ditemukan!")
-    except (json.JSONDecodeError, ValueError):
-        print("Format file tidak valid! Tidak ada tugas yang dimuat.")
-
-def main():
-    global stop_thread, deadline_check_thread
-    
-    # Memulai thread untuk mengecek deadline
-    deadline_check_thread = threading.Thread(target=check_deadlines)
-    deadline_check_thread.daemon = True
-    deadline_check_thread.start()
-    
-    while True:
-        show_menu()
-        choice = input("Pilih opsi (1-10): ")
-        clear_screen()
+            table_data.append([
+                task.id,
+                status,
+                task.title,
+                description[:30] + "..." if len(description) > 30 else description,
+                task.priority.icon,
+                task.deadline,
+                deadline_status,
+                time_remaining,
+                completed_at
+            ])
         
-        if choice == "1":
-            add_task()
-        elif choice == "2":
-            view_tasks()
-        elif choice == "3":
-            mark_task_completed()
-        elif choice == "4":
-            delete_task()
-        elif choice == "5":
-            edit_task()
-        elif choice == "6":
-            filter_tasks()
-        elif choice == "7":
-            search_task()
-        elif choice == "8":
-            save_tasks_to_file()
-        elif choice == "9":
-            load_tasks_from_file()
-        elif choice == "10":
-            stop_thread = True
-            if deadline_check_thread:
-                deadline_check_thread.join(timeout=1)
-            print("Keluar dari program. Sampai jumpa!")
-            break
-        else:
-            print("Pilihan tidak valid, coba lagi.")
+        headers = ["ID", "Status", "Judul", "Deskripsi", "Prioritas", "Deadline", 
+                  "Status Deadline", "Sisa Waktu", "Selesai Pada"]
+        return tabulate(table_data, headers=headers, tablefmt="grid")
 
+    def view_tasks(self):
+        self.clear_screen()
+        print(self.format_tasks_table(self.tasks))
+
+    def mark_task_completed(self):
+        self.view_tasks()
+        try:
+            task_id = int(input("\nMasukkan ID tugas yang ingin ditandai selesai: "))
+            task = next((t for t in self.tasks if t.id == task_id), None)
+            if task:
+                task.status = TaskStatus.COMPLETED
+                task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+                self.print_colored(f"Tugas '{task.title}' berhasil ditandai selesai!", Fore.GREEN)
+            else:
+                self.print_colored("ID tugas tidak ditemukan!", Fore.RED)
+        except ValueError:
+            self.print_colored("ID harus berupa angka!", Fore.RED)
+
+    def delete_task(self):
+        self.view_tasks()
+        try:
+            task_id = int(input("\nMasukkan ID tugas yang ingin dihapus: "))
+            task = next((t for t in self.tasks if t.id == task_id), None)
+            if task:
+                self.tasks.remove(task)
+                self.print_colored(f"Tugas '{task.title}' berhasil dihapus!", Fore.GREEN)
+            else:
+                self.print_colored("ID tugas tidak ditemukan!", Fore.RED)
+        except ValueError:
+            self.print_colored("ID harus berupa angka!", Fore.RED)
+
+    def edit_task(self):
+        self.view_tasks()
+        try:
+            task_id = int(input("\nMasukkan ID tugas yang ingin diedit: "))
+            task = next((t for t in self.tasks if t.id == task_id), None)
+            if task:
+                print("\nBiarkan kosong jika tidak ingin mengubah")
+                
+                title = input(f"Judul baru (sekarang: {task.title}): ").strip()
+                if title:
+                    task.title = title
+                
+                description = input(f"Deskripsi baru (sekarang: {task.description}): ").strip()
+                if description:
+                    task.description = description
+                
+                if input("Ubah prioritas? (y/n): ").lower() == 'y':
+                    task.priority = self._get_priority()
+                
+                if input("Ubah deadline? (y/n): ").lower() == 'y':
+                    task.deadline = self._get_deadline().strftime("%Y-%m-%d %H:%M")
+                
+                self.print_colored(f"Tugas '{task.title}' berhasil diperbarui!", Fore.GREEN)
+            else:
+                self.print_colored("ID tugas tidak ditemukan!", Fore.RED)
+        except ValueError:
+            self.print_colored("ID harus berupa angka!", Fore.RED)
+
+    def search_task(self):
+        keyword = input("Masukkan kata kunci pencarian: ").lower()
+        found_tasks = [
+            task for task in self.tasks
+            if keyword in task.title.lower() or 
+               keyword in task.description.lower()
+        ]
+        self.clear_screen()
+        print(self.format_tasks_table(found_tasks))
+
+    def save_tasks(self):
+        filename = input("Masukkan nama file untuk menyimpan tugas (contoh: tasks.json): ")
+        try:
+            with open(filename, 'w') as file:
+                json.dump([task.to_dict() for task in self.tasks], file, indent=4)
+            self.print_colored(f"Tugas berhasil disimpan ke file '{filename}'!", Fore.GREEN)
+        except Exception as e:
+            self.print_colored(f"Gagal menyimpan file: {str(e)}", Fore.RED)
+
+    def load_tasks(self):
+        filename = input("Masukkan nama file untuk memuat tugas (contoh: tasks.json): ")
+        try:
+            with open(filename, 'r') as file:
+                data = json.load(file)
+                self.tasks = [Task.from_dict(task_data) for task_data in data]
+                if self.tasks:
+                    self.task_id_counter = max(task.id for task in self.tasks) + 1
+            self.print_colored(f"Tugas berhasil dimuat dari file '{filename}'!", Fore.GREEN)
+        except FileNotFoundError:
+            self.print_colored(f"File '{filename}' tidak ditemukan!", Fore.RED)
+        except json.JSONDecodeError:
+            self.print_colored("Format file tidak valid!", Fore.RED)
+        except Exception as e:
+            self.print_colored(f"Gagal memuat file: {str(e)}", Fore.RED)
+
+    def show_statistics(self):
+        self.clear_screen()
+        total_tasks = len(self.tasks)
+        if total_tasks == 0:
+            self.print_colored("Belum ada tugas yang ditambahkan!", Fore.YELLOW)
+            return
+
+        completed_tasks = sum(1 for task in self.tasks if task.status == TaskStatus.COMPLETED)
+        pending_tasks = total_tasks - completed_tasks
+        now = datetime.now()
+        overdue_tasks = sum(1 for task in self.tasks 
+                           if task.status == TaskStatus.PENDING 
+                           and datetime.strptime(task.deadline, "%Y-%m-%d %H:%M") < now)
+        
+        priority_counts = {priority: sum(1 for task in self.tasks if task.priority == priority)
+                         for priority in Priority}
+        
+        self.print_colored(f"\nStatistik Tugas:", Fore.CYAN)
+        print(f"Total tugas         : {total_tasks}")
+        print(f"Tugas selesai       : {completed_tasks}")
+        print(f"Tugas pending       : {pending_tasks}")
+        print(f"Tugas terlambat     : {overdue_tasks}")
+        
+        print("\nJumlah tugas berdasarkan prioritas:")
+        for priority, count in priority_counts.items():
+            print(f"{priority.icon} {priority.label}: {count}")
+
+    def deadline_check_worker(self):
+        while not self.stop_thread:
+            now = datetime.now()
+            for task in self.tasks:
+                if (
+                    task.status == TaskStatus.PENDING and
+                    datetime.strptime(task.deadline, "%Y-%m-%d %H:%M") < now
+                ):
+                    self.print_colored(f"\n⚠️ Tugas '{task.title}' telah melewati deadline!", Fore.RED)
+            threading.Event().wait(60)  # Tunggu 60 detik sebelum mengecek lagi
+
+    def start_deadline_check(self):
+        if self.deadline_check_thread is None or not self.deadline_check_thread.is_alive():
+            self.deadline_check_thread = threading.Thread(target=self.deadline_check_worker, daemon=True)
+            self.deadline_check_thread.start()
+
+    def stop_deadline_check(self):
+        self.stop_thread = True
+        if self.deadline_check_thread is not None:
+            self.deadline_check_thread.join()
+
+    def run(self):
+        self.start_deadline_check()
+        while True:
+            self.clear_screen()
+            print("=== Task Manager ===")
+            print("1. Tambah Tugas")
+            print("2. Lihat Semua Tugas")
+            print("3. Tandai Tugas Selesai")
+            print("4. Hapus Tugas")
+            print("5. Edit Tugas")
+            print("6. Cari Tugas")
+            print("7. Simpan Tugas ke File")
+            print("8. Muat Tugas dari File")
+            print("9. Lihat Statistik")
+            print("0. Keluar")
+            
+            try:
+                choice = int(input("\nPilih menu: "))
+                if choice == 1:
+                    self.add_task()
+                elif choice == 2:
+                    self.view_tasks()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 3:
+                    self.mark_task_completed()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 4:
+                    self.delete_task()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 5:
+                    self.edit_task()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 6:
+                    self.search_task()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 7:
+                    self.save_tasks()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 8:
+                    self.load_tasks()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 9:
+                    self.show_statistics()
+                    input("\nTekan Enter untuk kembali ke menu...")
+                elif choice == 0:
+                    self.stop_deadline_check()
+                    self.print_colored("Terima kasih telah menggunakan Task Manager!", Fore.CYAN)
+                    break
+                else:
+                    self.print_colored("Pilihan tidak valid!", Fore.RED)
+            except ValueError:
+                self.print_colored("Masukkan angka yang valid!", Fore.RED)
+            except Exception as e:
+                self.print_colored(f"Terjadi kesalahan: {str(e)}", Fore.RED)
 if __name__ == "__main__":
-    main()
+    try:
+        task_manager = TaskManager()
+        task_manager.run()
+    except KeyboardInterrupt:
+        task_manager.stop_deadline_check()
+        TaskManager.print_colored("\nProgram dihentikan oleh pengguna.", Fore.CYAN)
+    except Exception as e:
+        TaskManager.print_colored(f"Terjadi kesalahan fatal: {str(e)}", Fore.RED)
