@@ -9,7 +9,6 @@ from colorama import Fore, Style
 from dataclasses import dataclass, asdict
 from typing import Optional, List, Union
 
-# Initialize colorama for cross-platform colored output
 colorama.init()
 
 class Priority(Enum):
@@ -432,8 +431,23 @@ class TaskManager:
                 self.print_colored(f"Terjadi kesalahan: {str(e)}", Fore.RED)
 if __name__ == "__main__":
     try:
+        print("Pilih mode aplikasi:")
+        print("1. Command Line Interface (CLI)")
+        print("2. Graphical User Interface (GUI)")
+        
+        choice = input("Pilihan (1/2): ").strip()
+        
         task_manager = TaskManager()
-        task_manager.run()
+        
+        if choice == "1":
+            task_manager.run()
+        elif choice == "2":
+            from taskManagerUI import TaskManagerUI
+            app = TaskManagerUI(task_manager)
+            app.mainloop()
+        else:
+            TaskManager.print_colored("Pilihan tidak valid!", Fore.RED)
+            
     except KeyboardInterrupt:
         task_manager.stop_deadline_check()
         TaskManager.print_colored("\nProgram dihentikan oleh pengguna.", Fore.CYAN)
