@@ -386,6 +386,13 @@ class ModernAddTaskDialog(ctk.CTkToplevel):
         
         self._create_widgets()
         self._setup_layout()
+    
+    def _adjust_color(self, hex_color, adjustment):
+        """Adjust color brightness"""
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        new_rgb = tuple(max(0, min(255, c + adjustment)) for c in rgb)
+        return '#{:02x}{:02x}{:02x}'.format(*new_rgb)
         
     def _create_widgets(self):
         # Title
@@ -559,31 +566,23 @@ class ModernAddTaskDialog(ctk.CTkToplevel):
         if not title:
             messagebox.showwarning("Warning", "Please enter a task title")
             return
-            
+                
         if deadline < datetime.now():
             messagebox.showwarning("Warning", "Deadline cannot be in the past")
             return
         
         # Create new task
-        task = Task(
+        new_task = Task(
             title=title,
             description=description,
             priority=priority,
             deadline=deadline.strftime("%Y-%m-%d %H:%M")
         )
-        
+    
         # Add to task manager
-        self.task_manager.add_task(task)
+        self.task_manager.tasks.append(new_task)
         messagebox.showinfo("Success", "Task added successfully!")
         self.destroy()
-
-    def _adjust_color(self, hex_color, adjustment):
-        """Adjust color brightness"""
-        hex_color = hex_color.lstrip('#')
-        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        new_rgb = tuple(max(0, min(255, c + adjustment)) for c in rgb)
-        return '#{:02x}{:02x}{:02x}'.format(*new_rgb)
-
 class ModernEditTaskDialog(ModernAddTaskDialog):
     def __init__(self, parent, task_manager, task):
         self.task = task
