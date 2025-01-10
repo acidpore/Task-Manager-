@@ -94,11 +94,12 @@ class ModernTaskManagerUI(ctk.CTk):
             )
             self.nav_buttons.append(btn)
         
-        # Modern search bar
+        # Modern search bar with enhanced styling
         self.search_frame = ctk.CTkFrame(
             self.main_frame,
             height=50,
-            corner_radius=10
+            corner_radius=10,
+            fg_color="#1E1E1E"
         )
         
         self.search_entry = ctk.CTkEntry(
@@ -106,7 +107,10 @@ class ModernTaskManagerUI(ctk.CTk):
             placeholder_text="Search tasks...",
             font=("Roboto", 12),
             height=35,
-            corner_radius=8
+            corner_radius=8,
+            fg_color="#2B2B2B",
+            border_color="#4A90E2",
+            border_width=1
         )
         
         self.search_btn = ctk.CTkButton(
@@ -121,10 +125,11 @@ class ModernTaskManagerUI(ctk.CTk):
             hover_color="#F57C00"
         )
         
-        # Enhanced Treeview
+        # Enhanced Treeview with modern styling
         self.task_frame = ctk.CTkFrame(
             self.main_frame,
-            corner_radius=10
+            corner_radius=10,
+            fg_color="#1E1E1E"
         )
         
         self.task_tree = ttk.Treeview(
@@ -135,7 +140,7 @@ class ModernTaskManagerUI(ctk.CTk):
         )
         self._setup_treeview()
         
-        # Action buttons frame
+        # Action buttons frame with improved styling
         self.action_frame = ctk.CTkFrame(
             self.main_frame,
             corner_radius=10,
@@ -143,18 +148,18 @@ class ModernTaskManagerUI(ctk.CTk):
         )
         
         action_buttons = [
-            ("Complete", self._complete_task, "#4CAF50"),
-            ("Edit", self._edit_task, "#2196F3"),
-            ("Delete", self._delete_task, "#F44336")
+            ("Complete", self._complete_task, "#4CAF50", "✓"),
+            ("Edit", self._edit_task, "#2196F3", "✎"),
+            ("Delete", self._delete_task, "#F44336", "×")
         ]
         
         self.action_buttons = []
-        for text, command, color in action_buttons:
+        for text, command, color, icon in action_buttons:
             btn = ctk.CTkButton(
                 self.action_frame,
-                text=text,
+                text=f"{icon} {text}",
                 command=command,
-                width=100,
+                width=120,
                 height=35,
                 corner_radius=8,
                 font=("Roboto", 12),
@@ -164,30 +169,53 @@ class ModernTaskManagerUI(ctk.CTk):
             self.action_buttons.append(btn)
 
     def _setup_treeview(self):
-        # Configure columns
+        # Configure columns with improved styling
         columns = {
-            "ID": 50,
+            "ID": 80,
             "Title": 300,
-            "Priority": 100,
-            "Deadline": 150,
-            "Status": 100,
+            "Priority": 120,
+            "Deadline": 180,
+            "Status": 120,
             "Progress": 150
         }
         
         for col, width in columns.items():
-            self.task_tree.heading(col, text=col, anchor="w")
-            self.task_tree.column(col, width=width, anchor="w")
+            self.task_tree.heading(
+                col, 
+                text=col.upper(),
+                anchor="w"
+            )
+            self.task_tree.column(
+                col,
+                width=width,
+                anchor="w",
+                stretch=True
+            )
         
-        # Add scrollbar
+        # Add scrollbar with modern styling
         self.scrollbar = ttk.Scrollbar(
             self.task_frame,
             orient="vertical",
-            command=self.task_tree.yview
+            command=self.task_tree.yview,
+            style="Modern.Vertical.TScrollbar"
         )
         self.task_tree.configure(yscrollcommand=self.scrollbar.set)
         
-        # Bind selection event
+        # Bind selection and hover events
         self.task_tree.bind("<<TreeviewSelect>>", self._on_select_task)
+        self.task_tree.bind("<Motion>", self._on_hover)
+        
+        # Add alternating row colors and hover effect
+        self.task_tree.tag_configure('oddrow', background='#333333')
+        self.task_tree.tag_configure('evenrow', background='#2B2B2B')
+        self.task_tree.tag_configure('hover', background='#404040')
+        
+        # Configure status-based tags
+        self.task_tree.tag_configure('completed', foreground='#888888', background='#2B2B2B')
+        self.task_tree.tag_configure('overdue', foreground='#FF6B6B')
+        self.task_tree.tag_configure('high_priority', foreground='#FF9090')
+        self.task_tree.tag_configure('medium_priority', foreground='#FFB347')
+        self.task_tree.tag_configure('low_priority', foreground='#90EE90')
         
     def _setup_layout(self):
         # Configure grid weights
@@ -205,7 +233,7 @@ class ModernTaskManagerUI(ctk.CTk):
         for btn in self.nav_buttons:
             btn.pack(pady=10, padx=15, fill="x")
         
-        # Main frame layout
+        # Main frame layout with improved spacing
         self.search_frame.pack(fill="x", padx=15, pady=15)
         self.search_entry.pack(side="left", fill="x", expand=True, padx=(15, 10))
         self.search_btn.pack(side="right", padx=15)
@@ -219,7 +247,6 @@ class ModernTaskManagerUI(ctk.CTk):
             btn.pack(side="left", padx=5)
 
     def _apply_custom_style(self):
-        # Create and configure ttk style
         style = ttk.Style()
         
         # Configure Treeview
@@ -229,15 +256,27 @@ class ModernTaskManagerUI(ctk.CTk):
             foreground="white",
             fieldbackground="#2B2B2B",
             borderwidth=0,
-            font=("Roboto", 11)
+            font=("Roboto", 11),
+            rowheight=40
         )
         
+        # Configure Treeview Headings
         style.configure(
             "Modern.Treeview.Heading",
-            background="#333333",
-            foreground="white",
-            borderwidth=1,
-            font=("Roboto", 12, "bold")
+            background="#1E1E1E",
+            foreground="#4A90E2",
+            borderwidth=0,
+            font=("Roboto", 12, "bold"),
+            padding=10
+        )
+        
+        # Configure Scrollbar
+        style.configure(
+            "Modern.Vertical.TScrollbar",
+            background="#2B2B2B",
+            bordercolor="#2B2B2B",
+            arrowcolor="white",
+            troughcolor="#1E1E1E"
         )
         
         # Remove borders
@@ -247,24 +286,35 @@ class ModernTaskManagerUI(ctk.CTk):
 
     def _adjust_color(self, hex_color, adjustment):
         """Adjust color brightness"""
-        # Convert hex to RGB
         hex_color = hex_color.lstrip('#')
         rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        
-        # Adjust brightness
-        new_rgb = tuple(
-            max(0, min(255, c + adjustment))
-            for c in rgb
-        )
-        
-        # Convert back to hex
+        new_rgb = tuple(max(0, min(255, c + adjustment)) for c in rgb)
         return '#{:02x}{:02x}{:02x}'.format(*new_rgb)
+
+    def _on_hover(self, event):
+        """Handle mouse hover over tasks"""
+        region = self.task_tree.identify_region(event.x, event.y)
+        if region == "cell":
+            iid = self.task_tree.identify_row(event.y)
+            if iid:
+                # Remove hover tag from all items
+                for item in self.task_tree.get_children():
+                    tags = list(self.task_tree.item(item, "tags"))
+                    if "hover" in tags:
+                        tags.remove("hover")
+                    self.task_tree.item(item, tags=tags)
+                
+                # Add hover tag to current item
+                current_tags = list(self.task_tree.item(iid, "tags"))
+                if "hover" not in current_tags:
+                    current_tags.append("hover")
+                    self.task_tree.item(iid, tags=current_tags)
 
     def _refresh_task_list(self):
         for item in self.task_tree.get_children():
             self.task_tree.delete(item)
             
-        for task in self.task_manager.tasks:
+        for i, task in enumerate(self.task_manager.tasks):
             deadline = datetime.strptime(task.deadline, "%Y-%m-%d %H:%M")
             now = datetime.now()
             
@@ -275,6 +325,26 @@ class ModernTaskManagerUI(ctk.CTk):
                 total_time = (deadline - datetime.strptime(task.created_at, "%Y-%m-%d %H:%M")).total_seconds()
                 elapsed_time = (now - datetime.strptime(task.created_at, "%Y-%m-%d %H:%M")).total_seconds()
                 progress = f"{min(100, int((elapsed_time / total_time) * 100))}%"
+            
+            # Determine row tags
+            tags = []
+            
+            # Add alternating row colors
+            tags.append('evenrow' if i % 2 == 0 else 'oddrow')
+            
+            # Add status-based tags
+            if task.status == TaskStatus.COMPLETED:
+                tags.append('completed')
+            elif deadline < now:
+                tags.append('overdue')
+                
+            # Add priority-based tags
+            if task.priority == Priority.HIGH:
+                tags.append('high_priority')
+            elif task.priority == Priority.MEDIUM:
+                tags.append('medium_priority')
+            else:
+                tags.append('low_priority')
             
             self.task_tree.insert(
                 "",
@@ -287,31 +357,19 @@ class ModernTaskManagerUI(ctk.CTk):
                     task.status.value,
                     progress
                 ),
-                tags=('completed',) if task.status == TaskStatus.COMPLETED else ()
+                tags=tags
             )
-        
-        # Configure tag colors
-        self.task_tree.tag_configure('completed', foreground='#888888')
-        
+
     def _search_tasks(self):
         search_term = self.search_entry.get().lower()
-        for item in self.task_tree.get_children():
-            self.task_tree.delete(item)
-    
-        for task in self.task_manager.tasks:
-            if search_term in task.title.lower() or search_term in task.description.lower():
-                self.task_tree.insert(
-                    "",
-                    "end",
-                    values=(
-                        task.id,
-                        task.title,
-                        f"{task.priority.icon} {task.priority.label}",
-                        datetime.strptime(task.deadline, "%Y-%m-%d %H:%M").strftime("%Y-%m-%d %H:%M"),
-                        task.status.value,
-                        "100%" if task.status == TaskStatus.COMPLETED else "0%"
-                    )
-                )
+        self._refresh_task_list()  # First refresh the list to show all items
+        
+        if search_term:  # Only filter if search term is not empty
+            for item in self.task_tree.get_children():
+                values = self.task_tree.item(item)['values']
+                title = str(values[1]).lower()
+                if search_term not in title:
+                    self.task_tree.detach(item)
 
     def _show_add_task_dialog(self):
         dialog = ModernAddTaskDialog(self, self.task_manager)
@@ -328,6 +386,10 @@ class ModernTaskManagerUI(ctk.CTk):
         task = next((t for t in self.task_manager.tasks if t.id == task_id), None)
         
         if task:
+            if task.status == TaskStatus.COMPLETED:
+                messagebox.showinfo("Info", "Task is already completed!")
+                return
+                
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             messagebox.showinfo("Success", f"Task '{task.title}' marked as completed!")
@@ -359,17 +421,213 @@ class ModernTaskManagerUI(ctk.CTk):
         if task:
             if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete task '{task.title}'?"):
                 self.task_manager.tasks.remove(task)
-                messagebox.showinfo("Success", f"Task '{task.title}' deleted!")
+                messagebox.showinfo("Success", f"Task '{task.title}' deleted successfully!")
                 self._refresh_task_list()
 
-    def _on_select_task(self, event):
-        # Enable/disable action buttons based on selection
-        selected = self.task_tree.selection()
-        for btn in self.action_buttons:
-            btn.configure(state="normal" if selected else "disabled")
-
     def _show_statistics(self):
-        ModernStatisticsDialog(self, self.task_manager)
+        stats_window = ModernStatisticsDialog(self, self.task_manager)
+        stats_window.grab_set()  # Make the window modal
+
+    def _on_select_task(self, event):
+        """Enable/disable action buttons based on task selection"""
+        selected = self.task_tree.selection()
+        
+        # Enable/disable buttons based on selection
+        for btn in self.action_buttons:
+            if selected:
+                btn.configure(state="normal")
+            else:
+                btn.configure(state="disabled")
+                
+        # If a task is selected, get its status
+        if selected:
+            task_id = int(self.task_tree.item(selected[0])['values'][0])
+            task = next((t for t in self.task_manager.tasks if t.id == task_id), None)
+            
+            if task and task.status == TaskStatus.COMPLETED:
+                # Disable complete button for completed tasks
+                self.action_buttons[0].configure(state="disabled")
+
+    def run(self):
+        """Start the application"""
+        self._refresh_task_list()
+        self.mainloop()
+
+
+class ModernAddTaskDialog(ctk.CTkToplevel):
+    def __init__(self, parent, task_manager):
+        super().__init__(parent)
+        
+        self.task_manager = task_manager
+        
+        # Configure window
+        self.title("Add New Task")
+        self.geometry("500x400")
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        # Center the dialog
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+        
+        self._create_widgets()
+        self._setup_layout()
+        
+    def _create_widgets(self):
+        # Title
+        self.title_label = ctk.CTkLabel(
+            self,
+            text="Add New Task",
+            font=("Roboto", 20, "bold"),
+            text_color="#4A90E2"
+        )
+        
+        # Task title
+        self.title_entry = ctk.CTkEntry(
+            self,
+            placeholder_text="Task title",
+            width=300,
+            height=35,
+            corner_radius=8
+        )
+        
+        # Priority selection
+        self.priority_var = tk.StringVar(value=Priority.MEDIUM.value)
+        self.priority_frame = ctk.CTkFrame(self, fg_color="transparent")
+        
+        self.priority_label = ctk.CTkLabel(
+            self.priority_frame,
+            text="Priority:",
+            font=("Roboto", 12)
+        )
+        
+        priorities = [(p.label, p.value) for p in Priority]
+        self.priority_buttons = []
+        
+        for label, value in priorities:
+            btn = ctk.CTkRadioButton(
+                self.priority_frame,
+                text=label,
+                value=value,
+                variable=self.priority_var,
+                font=("Roboto", 12)
+            )
+            self.priority_buttons.append(btn)
+        
+        # Deadline selection
+        self.deadline_frame = ctk.CTkFrame(self, fg_color="transparent")
+        
+        self.deadline_label = ctk.CTkLabel(
+            self.deadline_frame,
+            text="Deadline:",
+            font=("Roboto", 12)
+        )
+        
+        # Date picker
+        default_date = datetime.now() + timedelta(days=1)
+        self.date_picker = DateEntry(
+            self.deadline_frame,
+            width=12,
+            background='darkblue',
+            foreground='white',
+            borderwidth=2,
+            date_pattern='yyyy-mm-dd',
+            selectmode='day'
+        )
+        self.date_picker.set_date(default_date)
+        
+        # Time picker
+        self.time_var = tk.StringVar(value="12:00")
+        self.time_entry = ctk.CTkEntry(
+            self.deadline_frame,
+            textvariable=self.time_var,
+            width=100,
+            height=35,
+            corner_radius=8
+        )
+        
+        # Buttons
+        self.button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        
+        self.cancel_btn = ctk.CTkButton(
+            self.button_frame,
+            text="Cancel",
+            command=self.destroy,
+            width=120,
+            height=35,
+            corner_radius=8,
+            fg_color="#FF5252",
+            hover_color="#FF1744"
+        )
+        
+        self.save_btn = ctk.CTkButton(
+            self.button_frame,
+            text="Save Task",
+            command=self._save_task,
+            width=120,
+            height=35,
+            corner_radius=8,
+            fg_color="#4CAF50",
+            hover_color="#43A047"
+        )
+
+    def _setup_layout(self):
+        # Configure grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(4, weight=1)
+        
+        # Place widgets
+        self.title_label.grid(row=0, column=0, pady=(20, 10))
+        self.title_entry.grid(row=1, column=0, pady=10)
+        
+        # Priority frame
+        self.priority_frame.grid(row=2, column=0, pady=10)
+        self.priority_label.pack(side="left", padx=(0, 10))
+        for btn in self.priority_buttons:
+            btn.pack(side="left", padx=5)
+        
+        # Deadline frame
+        self.deadline_frame.grid(row=3, column=0, pady=10)
+        self.deadline_label.pack(side="left", padx=(0, 10))
+        self.date_picker.pack(side="left", padx=5)
+        self.time_entry.pack(side="left", padx=5)
+        
+        # Button frame
+        self.button_frame.grid(row=4, column=0, pady=20)
+        self.cancel_btn.pack(side="left", padx=5)
+        self.save_btn.pack(side="left", padx=5)
+
+    def _save_task(self):
+        title = self.title_entry.get().strip()
+        if not title:
+            messagebox.showwarning("Warning", "Please enter a task title")
+            return
+            
+        try:
+            deadline = f"{self.date_picker.get_date().strftime('%Y-%m-%d')} {self.time_var.get()}"
+            datetime.strptime(deadline, "%Y-%m-%d %H:%M")  # Validate datetime format
+        except ValueError:
+            messagebox.showwarning("Warning", "Please enter a valid time in HH:MM format")
+            return
+            
+        priority = Priority.from_value(self.priority_var.get())
+        
+        task = Task(
+            title=title,
+            priority=priority,
+            deadline=deadline,
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M")
+        )
+        
+        self.task_manager.add_task(task)
+        messagebox.showinfo("Success", f"Task '{title}' added successfully!")
+        self.destroy()
 
 # Kelas untuk dialog penambahan tugas baru
 class ModernAddTaskDialog(ctk.CTkToplevel):
